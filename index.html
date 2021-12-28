@@ -1,0 +1,47 @@
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>AR.js demo</title>
+    <script src="https://aframe.io/releases/1.0.4/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
+
+    <script>
+        AFRAME.registerComponent('clickhandler', {
+            init: function () {
+                const box = document.querySelector("#box");
+                let color = "yellow";
+                this.el.addEventListener('click', () => {
+                    if (color == "yellow") {
+                        box.setAttribute("color", "red");
+                        alert("clicked");
+                        color = "red";
+                    }
+                    else if (color == "red") {
+                        box.setAttribute("color", "yellow");
+                        alert("clicked");
+                        color = "yellow";
+                    }
+                })
+            }
+        });
+
+    </script>
+</head>
+
+<body>
+    <a-scene embedded arjs clickhandler>
+        <a-marker id="marker" preset="hiro">
+            <a-box id="box" position="0 0.5 0" material="color: yellow;"></a-box>
+        </a-marker>
+
+        <a-entity camera></a-entity>
+
+    </a-scene>
+
+</body>
+
+
+
+</html>

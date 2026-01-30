@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebXR AR with Plane Detection and Model Control</title>
+  <style>
+    body { margin: 0; }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+
+<script type="module">
+
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+  import { ARButton } from './ARButton.js';
+
+  let camera, scene, renderer, controls;
+  let reticle;  // For hit-testing
+  let controller;
+  let hitTestSource = null;
+  let hitTestSourceRequested = false;
+  let gltfModel;  // Variable to hold the loaded model
+
+  let autoRotate = true;  // Variable to toggle auto-rotation
+
+  // Initialize the scene, camera, and renderer
+  function init() {
+    scene = new THREE.Scene();
+
+    camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.xr.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    document.body.appendChild(ARButton.createButton(renderer, { requiredFeatures: ['hit-test'] }));
+
+    // Lighting for the scene
+    const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+    light.position.set(0.5, 1, 0.25);
+    scene.add(light);
+
+    // Reticle for hit-test (to visualize where the object will be placed)
+    const geometry = new THREE.RingGeometry(0.08, 0.1, 32).rotateX(-Math.PI / 2);
+    const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+    reticle = new THREE.Mesh(geometry, material);
+    reticle.matrixAutoUpdate = false;
+    reticle.visible = true;
+    scene.add(reticle);
+
+    // Load the GLTF model
+    const loader = new GLTFLoader();
+    loader.load('../uploads_files_2792345_Koenigsegg.glb', function (gltf) {
+      gltfModel = gltf.scene;
+      gltfModel.scale.set(0.03, 0.03, 0.03);
+      gltfModel.visible = true;  // Hide initially, only show on placement
+      scene.add(gltfModel);
+      controller = renderer.xr.getController(0);
+    controller.addEventListener('select', onSelect);
+    scene.add(controller)
+    }, undefined, function (error) {
+      console.error('An error happened while loading the model:', error);
+    });
+
+    // Controller to handle user interaction (taps)
+;
+
+    // OrbitControls to allow manual rotation and zoom
+    controls = new OrbitControls(camera, renderer.domElement);
+    controls.enableZoom = true;
+    controls.enablePan = false;
+    controls.rotateSpeed = 0.5;
+    controls.zoomSpeed = 1.2;
+
+    controls.addEventListener('start', () => autoRotate = false);  // Disable auto-rotate on user interaction
+    controls.addEventListener('end', () => autoRotate = true);     // Re-enable auto-rotate after interaction
+  }
+
+  // Event handler for placing the model on tap
+  function onSelect() {
+    if (reticle.visible && gltfModel) {
+      const modelInstance = gltfModel.clone();
+
+      modelInstance.position.setFromMatrixPosition(reticle.matrix);
+      modelInstance.visible = true;
+
+      scene.add(modelInstance);
+      reticle.visible = false;
+
+      // Make the model available for auto-rotation and user control
+      gltfModel = modelInstance;
+
+      controller.removeEventListener('select', onSelect);
+      scene.remove(reticle);
+    }
+  }
+
+
+
+  function render(timestamp, frame) {
+    if (frame) {
+      const referenceSpace = renderer.xr.getReferenceSpace();
+      const session = renderer.xr.getSession();
+
+      if (!hitTestSourceRequested) {
+        session.requestReferenceSpace('viewer').then((referenceSpace) => {
+          session.requestHitTestSource({ space: referenceSpace }).then((source) => {
+            hitTestSource = source;
+          });
+        });
+
+        session.addEventListener('end', () => {
+          hitTestSourceRequested = false;
+          hitTestSource = null;
+        });
+
+        hitTestSourceRequested = true;
+      }
+
+      if (hitTestSource) {
+        const hitTestResults = frame.getHitTestResults(hitTestSource);
+
+        if (hitTestResults.length > 0) {
+          const hit = hitTestResults[0];
+
+          const hitMatrix = new THREE.Matrix4().fromArray(hit.getPose(referenceSpace).transform.matrix);
+
+          reticle.visible = true;
+          reticle.matrix.fromArray(hitMatrix.elements);
+        } else {
+          reticle.visible = false;
+        }
+      }
+    }
+
+    // Rotate the model automatically if auto-rotate is enabled
+    if (gltfModel && autoRotate) {
+      gltfModel.rotation.y += 0.01;  // Adjust rotation speed here
+    }
+
+    // Update controls for user interaction
+    controls.update();
+
+    renderer.render(scene, camera);
+  }
+
+  // Resize handler to adjust camera and renderer
+  window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  //renderer.setAnimationLoop(render);  // Call render loop
+
+  init();
+</script>
+
+</body>
+</html>
